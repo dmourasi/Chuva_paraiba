@@ -1,0 +1,291 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(tidyverse)
+library(tidyr)
+library(zyp)
+library(trend)
+library(skimr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(modifiedmk)
+library(sf)
+library(ggplot2)
+library(RColorBrewer)
+library(geobr)
+library(gridExtra)
+library(ggspatial)
+library(readxl)
+
+#setwd("G:/Meu Drive/Projetos/Uso de cobertura de solo/chuva_teste")
+setwd("G:/Meu Drive/Projetos/Uso_solo")
+
+```
+
+
+
+```{r (echo = FALSE)}
+
+dados_completos_chuva <- read_excel("dados_completos_chuva.xlsx")
+View(dados_completos_chuva)
+dados_transp <- read_excel("dados_transp.xlsx")
+
+```
+
+```{r (echo = TRUE)}
+dados_filtrados <- subset(dados_completos_chuva, ano >= 1994)
+#dados_transp_f <- subset(dados_transp, Ano >= 1994)
+
+#dados_filtrados$ANO <- as.numeric(dados_filtrados$ANO)
+#dados_filtrados$AGRESTE_PARAIBANO <- as.numeric(dados_filtrados$AGRESTE_PARAIBANO)
+#dados_filtrados$BORBOREMA <- as.numeric(dados_filtrados$BORBOREMA)
+#dados_filtrados$MATA_PARAIBANA <- as.numeric(dados_filtrados$MATA_PARAIBANA)
+#dados_filtrados$SERTÃO_PARAIBANO <- as.numeric(dados_filtrados$SERTÃO_PARAIBANO)
+
+#dados_transp_f$Ano <- as.numeric(dados_transp_f$Ano)
+#dados_transp_f$Janeiro <- as.numeric(dados_transp_f$Janeiro)
+#dados_transp_f$Fevereiro <- as.numeric(dados_transp_f$Fevereiro)
+#dados_transp_f$Abril <- as.numeric(dados_transp_f$Abril)
+#dados_transp_f$Março <- as.numeric(dados_transp_f$Março)
+#dados_transp_f$Maio <- as.numeric(dados_transp_f$Maio)
+#dados_transp_f$Junho <- as.numeric(dados_transp_f$Junho)
+#dados_transp_f$Julho <- as.numeric(dados_transp_f$Julho)
+#dados_transp_f$Agosto <- as.numeric(dados_transp_f$Agosto)
+#dados_transp_f$Setembro <- as.numeric(dados_transp_f$Setembro)
+#dados_transp_f$Outubro <- as.numeric(dados_transp_f$Outubro)
+#dados_transp_f$Novembro <- as.numeric(dados_transp_f$Novembro)
+#dados_transp_f$Dezembro <- as.numeric(dados_transp_f$Dezembro)
+
+#regioes <- c("AGRESTE_PARAIBANO","BORBOREMA","MATA_PARAIBANA","SERTÃO_PARAIBANO" )
+meses <- c("Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto","Setembro", "Outubro","Novembro","Dezembro")
+
+dados_filtrados$meses <- meses[dados_filtrados$mes]
+
+dados_anuais <- dados_filtrados %>%
+  group_by(Mesoregiao, ano) %>%
+  summarize(anual = sum(Observ), .groups = 'drop')
+
+medias_anuais <- dados_filtrados %>%
+  group_by(Mesoregiao, ano) %>%
+  summarize(media = mean(Observ), .groups = 'drop')
+
+medias_sazonalidade_sertao <- dados_filtrados %>%
+  group_by(Mesoregiao, ano) %>%
+   summarize(media = mean(Observ), .groups = 'drop')
+
+medias_mensais <- dados_filtrados %>%
+  group_by(Mesoregiao, meses) %>%
+   summarize(media = mean(Observ), .groups = 'drop')
+
+medias_mensais_mata <- medias_mensais %>%
+  filter(medias_mensais$Mesoregiao == "MATA PARAIBANA")
+
+medias_mensais_borbo <- medias_mensais %>%
+  filter(medias_mensais$Mesoregiao == "BORBOREMA")
+
+medias_mensais_agres <- medias_mensais %>%
+  filter(medias_mensais$Mesoregiao == "AGRESTE PARAIBANO")
+
+medias_mensais_sertao <- medias_mensais %>%
+  filter(medias_mensais$Mesoregiao == "SERTÃO PARAIBANO")
+
+'dados_transp_f <- dados_transp_f %>%
+  mutate(Anual = rowSums(select(., meses)))'
+
+'ggplot(dados_transp_f) +
+ aes(x = Ano, y = Anual, colour = Mesoregiao) +
+ geom_line() +
+ scale_color_manual(values = c(`AGRESTE_PARAIBANO` = "#F8766D", 
+BORBOREMA = "#93AA00", MATA_PARAIBANA = "#00C19F", SERTÃO_PARAIBANO = "#619CFF")) +
+ theme_bw() +
+ theme(legend.position = "none") +
+ facet_grid(vars(Mesoregiao))'
+
+calcular_medias_sazonalidade_estacoes <- function(dados) {
+  dados <- dados %>%
+    filter((ano == 1994 & meses == "Dezembro") | (ano >= 1995 & ano <= 2021) | (ano == 2022 & meses != "Dezembro")) %>%
+    mutate(Estacao = case_when(
+      meses %in% c("Dezembro", "Janeiro", "Fevereiro") ~ "Verão",
+      meses %in% c("Março", "Abril", "Maio") ~ "Outono",
+      meses %in% c("Junho", "Julho", "Agosto") ~ "Inverno",
+      meses %in% c("Setembro", "Outubro", "Novembro") ~ "Primavera"
+    )) %>%
+    group_by(ano, Mesoregiao) %>%
+    mutate(ano = ifelse(Estacao == "Verão" & meses == "Dezembro", ano + 1, ano)) %>%
+    group_by(ano, Estacao, Mesoregiao) %>%
+    summarise(Media = sum(Observ), .groups = "drop") %>%
+    ungroup()
+}
+
+medias_sazonal <- calcular_medias_sazonalidade_estacoes(dados_filtrados)
+View(medias_sazonal)
+
+medias_sazonalidade_mata <- medias_sazonal %>%
+  filter(medias_sazonal$Mesoregiao == "MATA PARAIBANA")
+
+medias_sazonalidade_borbo <- medias_sazonal %>%
+  filter(medias_sazonal$Mesoregiao == "BORBOREMA")
+
+medias_sazonalidade_agres <- medias_sazonal %>%
+  filter(medias_sazonal$Mesoregiao == "AGRESTE PARAIBANO")
+
+medias_sazonalidade_sertao <- medias_sazonal %>%
+  filter(medias_sazonal$Mesoregiao == "SERTÃO PARAIBANO")
+
+```
+
+# Análise de Kendall e Sen's Slope das médias anuais entre Mesoregiões
+
+```{r (echo = TRUE)}
+
+tapply(medias_anuais$media, medias_anuais$Mesoregiao, mk.test)
+
+tapply(medias_anuais$media, medias_anuais$Mesoregiao, sens.slope)
+
+tapply(medias_anuais$media, medias_anuais$Mesoregiao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias mensais do agreste
+```{r (echo = TRUE)}
+
+tapply(medias_mensais_agres$media, medias_mensais_agres$Mesoregiao, mk.test)
+
+tapply(medias_mensais_agres$media, medias_mensais_agres$Mesoregiao, sens.slope)
+
+tapply(medias_mensais_agres$media, medias_mensais_agres$Mesoregiao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias mensais do mata
+```{r (echo = TRUE)}
+
+tapply(medias_mensais_mata$media, medias_mensais_mata$Mesoregiao, mk.test)
+
+tapply(medias_mensais_mata$media, medias_mensais_mata$Mesoregiao, sens.slope)
+
+tapply(medias_mensais_mata$media, medias_mensais_mata$Mesoregiao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias mensais do borborema
+```{r (echo = TRUE)}
+
+tapply(medias_mensais_borbo$media, medias_mensais_borbo$Mesoregiao, mk.test)
+
+tapply(medias_mensais_borbo$media, medias_mensais_borbo$Mesoregiao, sens.slope)
+
+tapply(medias_mensais_borbo$media, medias_mensais_borbo$Mesoregiao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias mensais do sertão
+```{r (echo = TRUE)}
+
+tapply(medias_mensais_sertao$media, medias_mensais_sertao$Mesoregiao, mk.test)
+
+tapply(medias_mensais_sertao$media, medias_mensais_sertao$Mesoregiao, sens.slope)
+
+tapply(medias_mensais_sertao$media, medias_mensais_sertao$Mesoregiao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias sazonal do agreste
+```{r (echo = TRUE)}
+
+tapply(medias_sazonalidade_agres$Media, medias_sazonalidade_agres$Estacao, mmkh)
+
+tapply(medias_sazonalidade_agres$Media, medias_sazonalidade_agres$Estacao, sens.slope)
+
+tapply(medias_sazonalidade_agres$Media, medias_sazonalidade_agres$Estacao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias sazonal do mata
+```{r (echo = TRUE)}
+
+tapply(medias_sazonalidade_mata$Media, medias_sazonalidade_mata$Estacao, mk.test)
+
+tapply(medias_sazonalidade_mata$Media, medias_sazonalidade_mata$Estacao, sens.slope)
+
+tapply(medias_sazonalidade_mata$Media, medias_sazonalidade_mata$Estacao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias sazonal do borborema
+```{r (echo = TRUE)}
+
+tapply(medias_sazonalidade_borbo$Media, medias_sazonalidade_borbo$Estacao, mk.test)
+
+tapply(medias_sazonalidade_borbo$Media, medias_sazonalidade_borbo$Estacao, sens.slope)
+
+tapply(medias_sazonalidade_borbo$Media, medias_sazonalidade_borbo$Estacao, mmkh)
+
+```
+
+# Análise de Kendall e Sen's Slope das médias sazonal do sertão
+```{r (echo = TRUE)}
+
+tapply(medias_sazonalidade_sertao$Media, medias_sazonalidade_sertao$Estacao, mk.test)
+
+tapply(medias_sazonalidade_sertao$Media, medias_sazonalidade_sertao$Estacao, sens.slope)
+
+tapply(medias_sazonalidade_sertao$Media, medias_sazonalidade_sertao$Estacao, mmkh)
+
+```
+
+# Gráfico de média anual
+```{r (echo = TRUE)}
+
+m_anuais <- ggplot(medias_anuais) +
+ aes(x = ano, y = media, colour = Mesoregiao) +
+ geom_line() +
+ scale_color_manual(values = c(`AGRESTE PARAIBANO` = "#F8766D",
+                                BORBOREMA = "#93AA00",
+                               `MATA PARAIBANA` = "#00C19F", 
+                               `SERTÃO PARAIBANO` = "#619CFF"),
+  labels = c("Agreste", "Borborema", "Mata Paraibana", "Sertão Paibano")
+) +
+ theme_bw()+
+ labs(  title = "Médias Anuais por Ano das Mesorregião",
+  x = "Ano",
+  y = "Média",
+  color = "Mesorregião") +
+   theme(plot.title = element_text(face = "bold")) 
+
+#PNG
+ggsave("m_anuais.png", plot = m_anuais, width = 8, height = 6, dpi = 300)
+#JPEG
+ggsave("m_anuais.jpeg", plot = m_anuais, width = 8, height = 6, dpi = 300, type = "cairo")
+
+```
+
+# Gráfico de média sazonal
+```{r (echo = TRUE)}
+
+m_sazonal <- ggplot(medias_sazonal) +
+ aes(x = ano, y = Media, colour = Mesoregiao) +
+ geom_line() +
+ scale_color_manual(values = c(`AGRESTE PARAIBANO` = "#F8766D",
+                                BORBOREMA = "#93AA00",
+                               `MATA PARAIBANA` = "#00C19F", 
+                               `SERTÃO PARAIBANO` = "#619CFF"),
+  labels = c("Agreste", "Borborema", "Mata Paraibana", "Sertão Paibano")
+) +
+ theme_bw()+
+ labs(  title = "Médias Sazonais por Ano das Mesorregião",
+  x = "Ano",
+  y = "Média",
+  color = "Mesorregião") +
+   theme(plot.title = element_text(face = "bold"))  +
+   #theme(legend.position = "none") +
+ facet_grid(vars(Estacao))
+
+#PNG
+ggsave("m_sazonal.png", plot = m_sazonal, width = 8, height = 6, dpi = 300)
+#JPEG
+ggsave("m_sazonal.jpeg", plot = m_sazonal, width = 8, height = 6, dpi = 300, type = "cairo")
+
+```
